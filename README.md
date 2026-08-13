@@ -1,4 +1,4 @@
-# NeetCode Solutions — @MahadFarooq07
+# NeetCode Solutions — @MahadFarooq07 DSA Javascript Account 2
 
 > Synced automatically from [NeetCode.io](https://neetcode.io) · Repository: `neetcode-submissions`
 
