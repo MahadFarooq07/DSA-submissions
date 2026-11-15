@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reorder List: Merge Loop Visualizer</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --line:#262a33; --text:#e6e8ec; --muted:#8b92a1;
+    --node:#1f2430; --nodeStroke:#3a4150; --accent:#f5b642;
+    --first:#5fb3ff; --second:#ff7a90; --tmp1:#7ee0a8; --tmp2:#c79bff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,sans-serif;padding:24px;}
+  .wrap{max-width:1100px;margin:0 auto;display:grid;gap:16px;}
+  h1{font-size:18px;font-weight:600;margin:0}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  .grid{display:grid;grid-template-columns:330px 1fr;gap:16px;}
+  @media (max-width:860px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;}
+  pre{margin:0;font-family:"JetBrains Mono",monospace;font-size:13px;line-height:1.75;}
+  .ln{display:block;padding:0 8px;border-radius:5px;border-left:3px solid transparent;color:#aeb4c0}
+  .ln.on{background:rgba(245,182,66,.12);border-left-color:var(--accent);color:#fff}
+  .kw{color:#c792ea}.v-first{color:var(--first)}.v-second{color:var(--second)}.v-tmp1{color:var(--tmp1)}.v-tmp2{color:var(--tmp2)}
+  .vars{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+  .var{background:var(--node);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-family:"JetBrains Mono",monospace;font-size:13px}
+  .var b{font-weight:600}
+  .var span{float:right;color:#fff}
+  .var.changed{border-color:var(--accent)}
+  svg{width:100%;height:auto;display:block}
+  .explain{font-size:14px;line-height:1.55;min-height:66px}
+  .explain code{font-family:"JetBrains Mono",monospace;background:#232836;padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  button,select{background:#232836;color:var(--text);border:1px solid var(--nodeStroke);border-radius:7px;padding:7px 12px;font:inherit;font-size:13px;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button:disabled{opacity:.4;cursor:default}
+  .step{color:var(--muted);font-size:13px;margin-left:auto;font-family:"JetBrains Mono",monospace}
+  .chain{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-family:"JetBrains Mono",monospace;font-size:13px;margin-top:6px}
+  .chip{background:var(--node);border:1px solid var(--nodeStroke);border-radius:6px;padding:3px 9px}
+  .arr{color:var(--muted)}
+  .label{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  .legend{display:flex;gap:14px;font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>Reorder List: the merge loop</h1>
+    <div class="sub">Starts after the split and reverse. Top row is the first half, bottom row is the reversed second half. Step through and watch the zig-zag form.</div>
+  </div>
+
+  <div class="panel controls">
+    <label style="font-size:13px;color:var(--muted)">List length
+      <select id="n"></select>
+    </label>
+    <button id="reset">⟲ Reset</button>
+    <button id="prev">← Prev</button>
+    <button id="next">Next →</button>
+    <button id="play">▶ Play</button>
+    <span class="step" id="stepLbl"></span>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <pre id="code"></pre>
+      <div class="vars" id="vars"></div>
+    </div>
+    <div style="display:grid;gap:16px;align-content:start">
+      <div class="panel">
+        <svg id="svg" viewBox="0 0 760 330"></svg>
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i>pointer just rewired</span>
+          <span><i style="background:var(--first)"></i>first</span>
+          <span><i style="background:var(--tmp1)"></i>tmp1</span>
+          <span><i style="background:var(--second)"></i>second</span>
+          <span><i style="background:var(--tmp2)"></i>tmp2</span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="explain" id="explain"></div>
+      </div>
+      <div class="panel">
+        <div class="label">Walking from head right now</div>
+        <div class="chain" id="chain"></div>
+        <div class="label" style="margin-top:12px">Walking from second right now</div>
+        <div class="chain" id="chain2"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CODE = [
+  ['<span class="kw">let</span> <span class="v-first">first</span> = head', 0],
+  ['<span class="v-second">second</span> = prev', 0],
+  ['', -1],
+  ['<span class="kw">while</span>(<span class="v-second">second</span>){', 0],
+  ['  <span class="kw">let</span> <span class="v-tmp1">tmp1</span> = <span class="v-first">first</span>.next', 0],
+  ['  <span class="kw">let</span> <span class="v-tmp2">tmp2</span> = <span class="v-second">second</span>.next', 0],
+  ['  <span class="v-first">first</span>.next = <span class="v-second">second</span>', 0],
+  ['  <span class="v-second">second</span>.next = <span class="v-tmp1">tmp1</span>', 0],
+  ['  <span class="v-first">first</span> = <span class="v-tmp1">tmp1</span>', 0],
+  ['  <span class="v-second">second</span> = <span class="v-tmp2">tmp2</span>', 0],
+  ['}', 0],
+];
+document.getElementById('code').innerHTML = CODE.map((c,i)=>`<span class="ln" data-i="${i}">${c[0]||'&nbsp;'}</span>`).join('');
+
+const nSel = document.getElementById('n');
+for(let i=2;i<=9;i++) nSel.innerHTML += `<option ${i===6?'selected':''}>${i}</option>`;
+
+let snaps=[], idx=0, k=0, N=6, timer=null;
+const v = x => x===null ? 'null' : x;
+
+function build(n){
+  N=n; k=Math.ceil(n/2);
+  const next={};
+  for(let i=1;i<=k;i++) next[i] = i<k ? i+1 : null;          // first half, cut at middle
+  for(let i=n;i>k;i--) next[i] = i>k+1 ? i-1 : null;         // second half, already reversed
+  const prevHead = n>k ? n : null;
+  let s = {first:null, second:null, tmp1:undefined, tmp2:undefined};
+  snaps=[];
+  const push=(lines, msg, changed=null, changedVars=[])=>snaps.push({next:{...next}, vars:{...s}, lines, msg, changed, changedVars});
+
+  s.first=1; s.second=prevHead;
+  push([0,1], `Setup. <code>first</code> points at the head of the first half (${1}), <code>second</code> points at the head of the reversed second half (${v(prevHead)}). The two lists are completely separate right now.`, null, ['first','second']);
+
+  let iter=0;
+  while(true){
+    if(s.second===null){
+      push([3], `<code>second</code> is <code>null</code>, so the loop exits. Every node from the second half has been woven in.${N%2? ' Odd length: the first half had one extra node, and it already ends in <code>null</code>, so nothing else to do.':''} Final list: <b>${walk(next,1).join(' → ')}</b>.`);
+      break;
+    }
+    iter++;
+    push([3], `<b>Iteration ${iter}.</b> <code>second</code> is ${s.second}, not null, so we go again.`);
+    s.tmp1 = next[s.first];
+    push([4], `Save <code>first.next</code> (${v(s.tmp1)}) into <code>tmp1</code>. We're about to overwrite <code>first.next</code>, and without this save we'd lose the rest of the first half.`, null, ['tmp1']);
+    s.tmp2 = next[s.second];
+    push([5], `Save <code>second.next</code> (${v(s.tmp2)}) into <code>tmp2</code>. Same reason: <code>second.next</code> is about to be overwritten.`, null, ['tmp2']);
+    next[s.first] = s.second;
+    push([6], `Rewire: node ${s.first} now points down to node ${s.second}. The old link ${s.first} → ${v(s.tmp1)} is gone, but <code>tmp1</code> still remembers ${v(s.tmp1)}.`, s.first);
+    next[s.second] = s.tmp1;
+    push([7], `Rewire: node ${s.second} now points back up to ${v(s.tmp1)}. That closes the zig: ${s.first} → ${s.second} → ${v(s.tmp1)}.${s.tmp1===null?' (It points to null here, which terminates the list.)':''}`, s.second);
+    s.first = s.tmp1;
+    push([8], `Advance <code>first</code> to ${v(s.first)} (the next unprocessed node in the first half).`, null, ['first']);
+    s.second = s.tmp2;
+    push([9], `Advance <code>second</code> to ${v(s.second)} (the next unprocessed node in the reversed half).`, null, ['second']);
+  }
+}
+
+function walk(next, start){
+  const out=[]; let c=start, seen=new Set();
+  while(c!==null && c!==undefined && !seen.has(c)){ out.push(c); seen.add(c); c=next[c]; }
+  return out;
+}
+
+const ROW_TOP=95, ROW_BOT=235, R=24;
+function pos(id){
+  const gap = Math.min(150, 620/Math.max(k,1));
+  const x0 = 70;
+  if(id<=k) return {x:x0+(id-1)*gap, y:ROW_TOP};
+  const j = N-id; // 0 for tail N
+  return {x:x0+(j+0.5)*gap, y:ROW_BOT};
+}
+const COLORS={first:'var(--first)',second:'var(--second)',tmp1:'var(--tmp1)',tmp2:'var(--tmp2)'};
+
+function render(){
+  const s=snaps[idx];
+  document.querySelectorAll('.ln').forEach(el=>el.classList.toggle('on', s.lines.includes(+el.dataset.i)));
+  document.getElementById('stepLbl').textContent=`step ${idx+1} / ${snaps.length}`;
+  document.getElementById('explain').innerHTML=s.msg;
+  document.getElementById('prev').disabled = idx===0;
+  document.getElementById('next').disabled = idx===snaps.length-1;
+
+  document.getElementById('vars').innerHTML = ['first','second','tmp1','tmp2'].map(name=>{
+    const val=s.vars[name];
+    return `<div class="var ${s.changedVars.includes(name)?'changed':''}"><b style="color:${COLORS[name]}">${name}</b><span>${val===undefined?'—':v(val)}</span></div>`;
+  }).join('');
+
+  let g=`<defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7383"/></marker>
+    <marker id="ahA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#f5b642"/></marker>
+  </defs>`;
+  g+=`<text x="12" y="${ROW_TOP+4}" fill="#5b6270" font-size="11" font-family="Inter">1st half</text>`;
+  g+=`<text x="12" y="${ROW_BOT+4}" fill="#5b6270" font-size="11" font-family="Inter">2nd (rev)</text>`;
+
+  // arrows
+  for(let id=1; id<=N; id++){
+    const t=s.next[id], a=pos(id), hot = s.changed===id;
+    const col = hot?'#f5b642':'#6b7383', mk = hot?'ahA':'ah', w = hot?2.6:1.6;
+    if(t===null){
+      const up = id<=k ? -1 : 1;
+      const ex=a.x+R+22, ey=a.y+up*22;
+      g+=`<line x1="${a.x+R*0.8}" y1="${a.y+up*R*0.55}" x2="${ex}" y2="${ey}" stroke="${col}" stroke-width="${w}" marker-end="url(#${mk})"/>`;
+      g+=`<text x="${ex+4}" y="${ey+(up>0?12:-2)}" fill="${hot?'#f5b642':'#6b7383'}" font-size="11" font-family="JetBrains Mono">null</text>`;
+      continue;
+    }
+    const b=pos(t);
+    const dx=b.x-a.x, dy=b.y-a.y, L=Math.hypot(dx,dy), ux=dx/L, uy=dy/L;
+    g+=`<line x1="${a.x+ux*R}" y1="${a.y+uy*R}" x2="${b.x-ux*(R+3)}" y2="${b.y-uy*(R+3)}" stroke="${col}" stroke-width="${w}" marker-end="url(#${mk})"/>`;
+  }
+  // nodes
+  for(let id=1; id<=N; id++){
+    const p=pos(id);
+    g+=`<circle cx="${p.x}" cy="${p.y}" r="${R}" fill="var(--node)" stroke="var(--nodeStroke)" stroke-width="1.5"/>`;
+    g+=`<text x="${p.x}" y="${p.y+5}" text-anchor="middle" fill="#fff" font-size="15" font-weight="600" font-family="JetBrains Mono">${id}</text>`;
+  }
+  // pointer tags
+  const tags={};
+  for(const name of ['first','tmp1','second','tmp2']){
+    const val=s.vars[name];
+    if(val===null||val===undefined) continue;
+    (tags[val]=tags[val]||[]).push(name);
+  }
+  for(const id in tags){
+    const p=pos(+id), top = +id<=k;
+    tags[id].forEach((name,i)=>{
+      const y = top ? p.y-R-14-i*20 : p.y+R+22+i*20;
+      const hot = s.changedVars.includes(name);
+      const wdt = name.length*8+14;
+      g+=`<rect x="${p.x-wdt/2}" y="${y-13}" width="${wdt}" height="18" rx="4" fill="${COLORS[name]}" opacity="${hot?1:.85}" ${hot?'stroke="#f5b642" stroke-width="2"':''}/>`;
+      g+=`<text x="${p.x}" y="${y}" text-anchor="middle" fill="#0f1115" font-size="11.5" font-weight="600" font-family="JetBrains Mono">${name}</text>`;
+    });
+  }
+  document.getElementById('svg').innerHTML=g;
+
+  const chain = (start)=> {
+    if(start===null||start===undefined) return '<span class="arr">null</span>';
+    const w=walk(s.next,start);
+    return w.map(x=>`<span class="chip">${x}</span>`).join('<span class="arr">→</span>')+'<span class="arr">→ null</span>';
+  };
+  document.getElementById('chain').innerHTML=chain(1);
+  document.getElementById('chain2').innerHTML=chain(s.vars.second);
+}
+
+function stop(){ clearInterval(timer); timer=null; document.getElementById('play').textContent='▶ Play'; }
+document.getElementById('next').onclick=()=>{ if(idx<snaps.length-1){idx++;render();} };
+document.getElementById('prev').onclick=()=>{ if(idx>0){idx--;render();} };
+document.getElementById('reset').onclick=()=>{ stop(); idx=0; render(); };
+document.getElementById('play').onclick=()=>{
+  if(timer){stop();return;}
+  if(idx===snaps.length-1) idx=0;
+  document.getElementById('play').textContent='❚❚ Pause';
+  timer=setInterval(()=>{ if(idx>=snaps.length-1){stop();return;} idx++; render(); }, 1100);
+};
+nSel.onchange=()=>{ stop(); build(+nSel.value); idx=0; render(); };
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight') document.getElementById('next').click();
+  if(e.key==='ArrowLeft') document.getElementById('prev').click();
+  if(e.key===' '){ e.preventDefault(); document.getElementById('play').click(); }
+});
+
+build(6); render();
+</script>
+</body>
+</html>
