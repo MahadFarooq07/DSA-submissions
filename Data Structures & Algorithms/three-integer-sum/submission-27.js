@@ -1,0 +1,32 @@
+class Solution {
+    /**
+     * @param {number[]} nums
+     * @return {number[][]}
+     */
+    threeSum(nums) {
+        let output = []
+        nums = nums.sort((a,b) => a-b)
+        
+        for(let i = 0 ; i<nums.length; i++){
+
+            if(i>0&&(nums[i] !=nums[i-1])){
+                continue
+            }
+
+        let left = 0
+        let right = nums.length -1
+
+
+            while(left<=right){
+                if(nums[i] + nums[left] + nums[right] === 0){
+                    output.push([nums[i],nums[left],nums[right]])
+                }else if(nums[i] + nums[left] + nums[right]<0){
+                    left++
+                }else{
+                    right--
+                }
+            }
+        }
+        return output
+    }
+}
